@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CSVお直し屋</title>
+<style>
+:root{--bg:#f5f6f3;--fg:#1c2420;--mut:#5b665f;--card:#fff;--line:#d8ddd6;--ac:#1d6b4d;--acfg:#fff;--warn:#b04e14;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#131916;--fg:#e8ece9;--mut:#9aa69e;--card:#1b231f;--line:#2d3933;--ac:#4cc08c;--acfg:#0b1410;--warn:#e8915a}}
+:root[data-theme="dark"]{--bg:#131916;--fg:#e8ece9;--mut:#9aa69e;--card:#1b231f;--line:#2d3933;--ac:#4cc08c;--acfg:#0b1410;--warn:#e8915a}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.6 "Hiragino Sans","Yu Gothic",Meiryo,sans-serif}
+main{max-width:900px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:22px;margin:0 0 4px}
+h2{font-size:15px;margin:0 0 8px}
+.sub,.mut{color:var(--mut);font-size:13px}
+.sub{margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tabs button{flex:1;padding:10px}
+.tabs button.on{background:var(--ac);color:var(--acfg);border-color:var(--ac);font-weight:600}
+#drop{border:2px dashed var(--line);text-align:center;padding:26px 12px;cursor:pointer}
+#drop.on{border-color:var(--ac)}
+button,select,input[type=text],textarea{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+button{cursor:pointer}
+button.p{background:var(--ac);color:var(--acfg);border-color:var(--ac);font-weight:600;padding:9px 18px}
+button.i{padding:2px 8px}
+.row{display:flex;gap:8px 14px;flex-wrap:wrap;align-items:center}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;white-space:nowrap}
+td input[type=text]{width:150px}
+textarea{width:100%;min-height:64px}
+.warn{color:var(--warn);font-size:12px}
+#grid td input{width:110px;padding:3px 6px}
+#grid input.ed{background:rgba(214,160,40,.3);border-color:var(--warn)}
+[hidden]{display:none!important}
+</style></head>
+<body><main>
+<h1>CSVお直し屋</h1>
+<p class="sub">パターンを選んでCSVを取り込み、内容を確認して出力します。処理はすべてこのブラウザの中だけで行われ、ファイルは外部に送信されません。</p>
+<div class="tabs"><button id="tRun" class="on">使う</button><button id="tAdm">設定(管理画面)</button></div>
+
+<section id="vRun">
+  <div class="card">
+    <h2>① パターンを選ぶ</h2>
+    <div class="row"><select id="rPat"></select><span id="rDesc" class="mut"></span></div>
+    <p class="mut" style="margin:6px 0 0">パターンの作成・変更は「設定(管理画面)」で行います。パターンを変えたときや、パターンの入力設定を変えたときは、CSVを読み込み直されます(修正はリセット)。</p>
+  </div>
+  <div class="card" id="drop"><div>② CSVファイルをここにドロップ、またはクリックして選択</div><input id="file" type="file" accept=".csv,.txt,text/csv" hidden></div>
+  <div id="rWork" hidden>
+    <div class="card">
+      <h2>③ 内容を確認・修正する(任意)</h2>
+      <div class="row"><span id="rInfo" class="mut"></span><span id="gcnt" class="mut"></span><button id="gReset">修正をすべて元に戻す</button></div>
+      <div class="row" style="margin:8px 0"><input type="text" id="gq" placeholder="検索して行を絞り込み"><button id="gPrev">前へ</button><span id="gpg" class="mut"></span><button id="gNext">次へ</button></div>
+      <p class="mut" style="margin:0 0 6px">セルを書き換えると、出力にそのまま反映されます。修正したセルは黄色で表示されます。</p>
+      <div class="scroll"><table id="grid"></table></div>
+    </div>
+    <div class="card">
+      <h2>④ 出力して保存する</h2>
+      <div class="scroll"><table id="rPrev"></table></div>
+      <div class="row" style="margin-top:10px"><button class="p" id="rSave">整えたCSVを保存</button><span id="rMsg" class="mut"></span></div>
+    </div>
+  </div>
+</section>
+
+<section id="vAdm" hidden>
+  <div class="card">
+    <h2>パターン</h2>
+    <div class="row"><select id="aPat"></select><button id="aNew">新規</button><button id="aDup">複製</button><button id="aDel">削除</button></div>
+    <div class="row" style="margin-top:8px"><button id="aExp">全パターンを書き出す(JSON)</button><button id="aImp">パターンを読み込む(JSON)</button><input type="file" id="aImpF" accept=".json,application/json" hidden><span id="aMsg0" class="mut"></span></div>
+    <p class="mut" style="margin:6px 0 0">書き出したJSONファイルを渡せば、同じパターンを別の端末や別の人にも使ってもらえます。</p>
+  </div>
+  <div class="card">
+    <h2>入力設定</h2>
+    <div class="row">
+      <label>パターン名 <input type="text" data-f="name"></label>
+      <label>区切り <select data-f="indelim"><option value=",">カンマ</option><option value="&#9;">タブ</option></select></label>
+      <label>文字コード <select data-f="inenc"><option value="auto">自動判定</option><option value="utf-8">UTF-8</option><option value="shift_jis">Shift_JIS</option></select></label>
+      <label><input type="checkbox" data-f="hdr"> 1行目は見出し行</label>
+    </div>
+    <div class="row" style="margin:10px 0">
+      <button id="aSample">サンプルCSVを読み込む</button><input type="file" id="aSampleF" accept=".csv,.txt,text/csv" hidden>
+      <button id="bHead">見出しをまとめてつける</button>
+      <span id="aInfo" class="mut"></span>
+    </div>
+    <div id="pHead" hidden>
+      <p class="mut" style="margin:0 0 4px">左の列から順に、カンマまたは改行で区切って入力します。</p>
+      <textarea id="headTxt" placeholder="例: 伝票番号,商品コード,数量,出荷日"></textarea>
+      <button id="headOk">この見出しを適用</button>
+    </div>
+    <p class="mut" style="margin:0 0 6px">サンプルCSVを読み込むと、列を確認できます。表の一番上の入力欄に、直接見出しを入力できます。</p>
+    <div class="scroll" id="aCols"></div>
+  </div>
+  <div class="card">
+    <h2>出力列</h2>
+    <div class="row" style="margin-bottom:8px">
+      <button id="aSrc">＋取込列を追加</button><button id="aFix">＋固定値を追加</button><button id="aBlank">＋空欄の列を追加</button><button id="aReset">全取込列に戻す</button>
+    </div>
+    <p class="mut" style="margin:0 0 6px">固定値には <code>{today}</code>(今日の日付 yyyymmdd)と <code>{seq}</code>(連番、<code>{seq:5}</code>で5桁ゼロ埋め)が使えます。</p>
+    <div class="scroll"><table id="oCols"></table></div>
+  </div>
+  <div class="card">
+    <h2>出力設定</h2>
+    <div class="row">
+      <label>区切り <select data-f="od"><option value=",">カンマ</option><option value="&#9;">タブ</option></select></label>
+      <label><input type="checkbox" data-f="oh"> 見出し行を出力</label>
+      <label><input type="checkbox" data-f="oq"> 全項目を""で囲む</label>
+      <label>文字コード <select data-f="oe"><option value="sjis">Shift_JIS(Excel向け)</option><option value="utf8bom">UTF-8(BOM付き)</option></select></label>
+      <label>ファイル名 <input type="text" data-f="fname"></label>
+    </div>
+  </div>
+  <div class="card">
+    <h2>プレビュー(サンプルCSVの先頭5行)</h2>
+    <div class="scroll"><table id="aPrev"></table></div>
+    <div class="row" style="margin-top:10px"><button class="p" id="aSave">このパターンを保存</button><span id="aMsg" class="mut"></span></div>
+    <p class="mut" style="margin:6px 0 0">パターン名を変えて保存すると、別のパターンとして追加されます。</p>
+  </div>
+</section>
+</main>
+
+<script>
+var KEY="oshiya_patterns2",ZR=/^0\d+$/,P={},R={buf:null,body:[],n:0,ed:{},pg:0},D=null,A={buf:null,body:[],n:0},dl=null;
+function $(i){return document.getElementById(i)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]})}
+function clone(o){return JSON.parse(JSON.stringify(o))}
+
+/* ---- 共通処理 ---- */
+function parseCSV(t,d){
+  var r=[],row=[],f="",q=false,i=0,c;
+  if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);
+  for(;i<t.length;i++){
+    c=t[i];
+    if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;
+    else if(c===d){row.push(f);f=""}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;row.push(f);r.push(row);row=[];f=""}
+    else f+=c;
+  }
+  if(f!==""||row.length){row.push(f);r.push(row)}
+  return r;
+}
+function dec(buf,m){
+  if(m==="utf-8"||m==="shift_jis")return {t:new TextDecoder(m).decode(buf),e:m==="utf-8"?"UTF-8":"Shift_JIS"};
+  try{return {t:new TextDecoder("utf-8",{fatal:true}).decode(buf),e:"UTF-8"}}
+  catch(x){return {t:new TextDecoder("shift_jis").decode(buf),e:"Shift_JIS"}}
+}
+function parseWith(buf,p){
+  var d=dec(buf,p.inenc),rows=parseCSV(d.t,p.indelim),n=0;
+  rows.forEach(function(r){n=Math.max(n,r.length)});
+  return {rows:rows,n:n,e:d.e,body:p.hdr?rows.slice(1):rows};
+}
+function cell(c,r,i){
+  var v="";
+  if(c.t==="src")v=r[c.s]||"";
+  else if(c.t==="fix"){
+    var d=new Date(),t=d.getFullYear()+("0"+(d.getMonth()+1)).slice(-2)+("0"+d.getDate()).slice(-2);
+    v=c.v.replace(/\{today\}/g,t).replace(/\{seq(?::(\d+))?\}/g,function(m,w){var s=String(i+1);return w?("0".repeat(+w)+s).slice(-Math.max(+w,s.length)):s});
+  }
+  return v;
+}
+function q(s,all){return (all||/[",\r\n\t]/.test(s))?'"'+s.replace(/"/g,'""')+'"':s}
+function buildCSV(p,body){
+  var d=p.od,all=p.oq,out=[];
+  if(p.oh)out.push(p.out.map(function(c){return q(c.n,all)}).join(d));
+  body.forEach(function(r,i){
+    out.push(p.out.map(function(c){
+      var v=cell(c,r,i);
+      if(c.z&&/^\d+$/.test(v))return q('="'+v+'"',true);
+      return q(v,all);
+    }).join(d));
+  });
+  return out.join("\r\n")+"\r\n";
+}
+function prevTable(el,p,body){
+  var h="<tr>"+p.out.map(function(c){return "<th>"+esc(c.n)+"</th>"}).join("")+"</tr>";
+  body.slice(0,5).forEach(function(r,i){h+="<tr>"+p.out.map(function(c){return "<td>"+esc(cell(c,r,i))+"</td>"}).join("")+"</tr>"});
+  el.innerHTML=h;
+}
+var SJ=null;
+function sjMap(){
+  if(SJ)return SJ;
+  SJ={};
+  var dc=new TextDecoder("shift_jis"),i,l,t,s,rg=[[0x81,0x9F],[0xFA,0xFC],[0xE0,0xF9]],k;
+  for(i=0xA1;i<=0xDF;i++){s=dc.decode(Uint8Array.of(i));if(s&&s!=="\uFFFD")SJ[s]=[i]}
+  for(k=0;k<rg.length;k++)for(l=rg[k][0];l<=rg[k][1];l++)for(t=0x40;t<=0xFC;t++){
+    if(t===0x7F)continue;
+    s=dc.decode(Uint8Array.of(l,t));
+    if(s.length===1&&s!=="\uFFFD"&&!(s in SJ))SJ[s]=[l,t];
+  }
+  return SJ;
+}
+function sjEnc(text){
+  var m=sjMap(),out=[],bad={},n=0,i,cp,ch,v,j;
+  for(i=0;i<text.length;i++){
+    cp=text.codePointAt(i);ch=String.fromCodePoint(cp);if(cp>0xFFFF)i++;
+    if(cp<0x80){out.push(cp);continue}
+    v=m[ch];
+    if(v){for(j=0;j<v.length;j++)out.push(v[j])}
+    else{out.push(0x3F);bad[ch]=1;n++}
+  }
+  return {bytes:Uint8Array.from(out),bad:Object.keys(bad),n:n};
+}
+function saveData(name,data,m){
+  var b=data instanceof Blob?data:new Blob([data]),a=document.createElement("a");
+  a.href=URL.createObjectURL(b);a.download=name;
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000);
+  m.textContent="保存しました(ダウンロードフォルダを確認してください)";
+}
+function saveCSV(p,body,m){
+  m.textContent="";
+  if(!p||!p.out.length){m.textContent="出力する列がありません";return}
+  var text=buildCSV(p,body),data,note="";
+  if(p.oe==="sjis"){
+    var r=sjEnc(text);data=r.bytes;
+    if(r.n)note="※Shift_JISに変換できない文字が"+r.n+"個あり、「?」に置き換えました: "+r.bad.slice(0,10).join(" ");
+  }else data=new Blob(["\uFEFF"+text]);
+  var nm=(p.fname||"cleaned.csv");if(!/\.csv$/i.test(nm))nm+=".csv";
+  saveData(nm,data,m);
+  if(note)m.textContent+=" "+note;
+}
+
+/* ---- パターンの保管 ---- */
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(P));return true}catch(e){return false}}
+function seed(){
+  P["サンプル:見出しなし出荷CSV"]={name:"サンプル:見出しなし出荷CSV",hdr:false,indelim:",",inenc:"auto",
+    names:["伝票番号","郵便番号","商品コード","数量","出荷日","届け先名"],
+    out:[{n:"連番",t:"fix",s:0,v:"{seq:5}",z:false},{n:"荷主コード",t:"fix",s:0,v:"ABC001",z:false},{n:"取込日",t:"fix",s:0,v:"{today}",z:false},
+      {n:"商品コード",t:"src",s:2,v:"",z:true},{n:"数量",t:"src",s:3,v:"",z:false},{n:"郵便番号",t:"src",s:1,v:"",z:true},{n:"届け先",t:"src",s:5,v:"",z:false}],
+    od:",",oh:true,oq:false,oe:"sjis",fname:"cleaned.csv"};
+}
+function loadP(){
+  try{P=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){P={}}
+  if(!Object.keys(P).length)seed();
+}
+function opts(sel){
+  return Object.keys(P).map(function(k){return "<option>"+esc(k)+"</option>"}).join("");
+}
+
+/* ---- 画面切り替え ---- */
+function mode(m){
+  $("vRun").hidden=m!=="run";$("vAdm").hidden=m!=="adm";
+  $("tRun").classList.toggle("on",m==="run");$("tAdm").classList.toggle("on",m==="adm");
+  if(m==="run"){fillRun();if(R.buf){rGrid();rPrev()}}
+  else{aList($("aPat").value);if(!D)aPick($("aPat").value)}
+}
+$("tRun").onclick=function(){mode("run")};
+$("tAdm").onclick=function(){mode("adm")};
+
+/* ---- 使う画面 ---- */
+function fillRun(){
+  var cur=$("rPat").value;
+  $("rPat").innerHTML=opts();
+  if(P[cur])$("rPat").value=cur;
+  rDesc();
+}
+function rDesc(){
+  var p=P[$("rPat").value];
+  $("rDesc").textContent=p?("入力: "+(p.hdr?"見出しあり":"見出しなし")+" / 出力 "+p.out.length+"列 / "+(p.oe==="sjis"?"Shift_JIS":"UTF-8")):"";
+}
+function rLoad(){
+  var p=P[$("rPat").value];
+  if(!p||!R.buf)return;
+  var a=parseWith(R.buf,p);
+  if(!a.rows.length){$("rMsg").textContent="空のファイルです";return}
+  R.body=a.body;R.n=a.n;R.ed={};R.pg=0;$("gq").value="";
+  var warn=(p.names.length&&p.names.length!==a.n)?"(注意: このパターンは"+p.names.length+"列用ですが、CSVは"+a.n+"列です)":"";
+  $("rInfo").textContent="判定: "+a.e+" / "+R.body.length+"行 × "+a.n+"列"+warn;
+  $("rWork").hidden=false;rGrid();rPrev();
+}
+function rPrev(){var p=P[$("rPat").value];if(p)prevTable($("rPrev"),p,R.body)}
+function rcnt(){$("gcnt").textContent="修正済み "+Object.keys(R.ed).length+" か所"}
+function rGrid(){
+  rcnt();
+  var p=P[$("rPat").value]||{names:[]},k=($("gq").value||"").trim(),idx=[];
+  R.body.forEach(function(r,i){if(!k||r.some(function(v){return String(v).indexOf(k)>=0}))idx.push(i)});
+  var per=20,pages=Math.max(1,Math.ceil(idx.length/per)),h="<tr><th>行</th>",ci;
+  R.pg=Math.min(R.pg,pages-1);
+  for(ci=0;ci<R.n;ci++)h+="<th>"+esc(p.names[ci]||"列"+(ci+1))+"</th>";
+  h+="</tr>";
+  idx.slice(R.pg*per,R.pg*per+per).forEach(function(ri){
+    h+="<tr><td>"+(ri+1)+"</td>";
+    for(ci=0;ci<R.n;ci++){
+      var v=R.body[ri][ci];
+      h+='<td><input type="text" data-r="'+ri+'" data-c="'+ci+'" class="'+(R.ed[ri+","+ci]!==undefined?"ed":"")+'" value="'+esc(v===undefined?"":v)+'"></td>';
+    }
+    h+="</tr>";
+  });
+  $("grid").innerHTML=h;
+  $("gpg").textContent=(R.pg+1)+" / "+pages+" ページ(該当"+idx.length+"行)";
+}
+$("grid").addEventListener("input",function(e){
+  var t=e.target,r=+t.dataset.r,c=+t.dataset.c,k=r+","+c,v=t.value;
+  if(R.ed[k]===undefined)R.ed[k]=R.body[r][c]===undefined?"":R.body[r][c];
+  R.body[r][c]=v;
+  if(v===R.ed[k])delete R.ed[k];
+  t.classList.toggle("ed",R.ed[k]!==undefined);
+  rcnt();rPrev();
+});
+$("gq").oninput=function(){R.pg=0;rGrid()};
+$("gPrev").onclick=function(){if(R.pg>0){R.pg--;rGrid()}};
+$("gNext").onclick=function(){R.pg++;rGrid()};
+$("gReset").onclick=function(){
+  Object.keys(R.ed).forEach(function(k){var p=k.split(",");R.body[+p[0]][+p[1]]=R.ed[k]});
+  R.ed={};rGrid();rPrev();
+};
+$("rPat").onchange=function(){rDesc();if(R.buf)rLoad()};
+$("rSave").onclick=function(){saveCSV(P[$("rPat").value],R.body,$("rMsg"))};
+function rPick(f){var r=new FileReader();r.onload=function(){R.buf=r.result;rLoad()};r.readAsArrayBuffer(f)}
+$("drop").onclick=function(){$("file").click()};
+$("file").onchange=function(e){if(e.target.files[0])rPick(e.target.files[0])};
+$("drop").ondragover=function(e){e.preventDefault();this.classList.add("on")};
+$("drop").ondragleave=function(){this.classList.remove("on")};
+$("drop").ondrop=function(e){e.preventDefault();this.classList.remove("on");if(e.dataTransfer.files[0])rPick(e.dataTransfer.files[0])};
+
+/* ---- 設定(管理画面) ---- */
+function aList(sel){$("aPat").innerHTML=opts();if(sel&&P[sel])$("aPat").value=sel}
+function blank(){return {name:"新しいパターン",hdr:true,indelim:",",inenc:"auto",names:[],out:[],od:",",oh:true,oq:false,oe:"sjis",fname:"cleaned.csv"}}
+function aPick(name){D=P[name]?clone(P[name]):blank();D.orig=P[name]?name:null;A={buf:null,body:[],n:0};aAll()}
+function aAll(){
+  document.querySelectorAll("[data-f]").forEach(function(el){
+    var v=D[el.dataset.f];
+    if(el.type==="checkbox")el.checked=!!v;else el.value=(v===undefined?"":v);
+  });
+  $("aInfo").textContent=A.buf?("サンプル: "+A.e+" / "+A.body.length+"行 × "+A.n+"列"):"";
+  aCols();aOut();aPrevT();
+}
+function zero(i){return A.body.some(function(r){return ZR.test(r[i]||"")})}
+function aParse(){
+  if(!A.buf){aAll();return}
+  var a=parseWith(A.buf,D),h=D.hdr?a.rows[0]:[],i;
+  A.body=a.body;A.n=a.n;A.e=a.e;D.names=[];
+  for(i=0;i<a.n;i++)D.names.push(h&&h[i]?h[i]:"列"+(i+1));
+  if(!D.out.length)D.out=D.names.map(function(nm,k){return {n:nm,t:"src",s:k,v:"",z:zero(k)}});
+  aAll();
+}
+$("vAdm").addEventListener("change",function(e){
+  var f=e.target.dataset.f;
+  if(!f||!D)return;
+  D[f]=e.target.type==="checkbox"?e.target.checked:e.target.value;
+  if(f==="hdr"||f==="indelim"||f==="inenc"){aParse()}else if(f!=="name"&&f!=="fname"){aPrevT()}
+});
+$("aSample").onclick=function(){$("aSampleF").click()};
+$("aSampleF").onchange=function(e){
+  var f=e.target.files[0];if(!f)return;
+  var r=new FileReader();r.onload=function(){A.buf=r.result;aParse()};r.readAsArrayBuffer(f);
+};
+function aCols(){
+  if(!D.names.length){$("aCols").innerHTML='<p class="warn">サンプルCSVを読み込むと、列がここに表示されます。</p>';return}
+  var h="<table><tr>"+D.names.map(function(nm,i){return '<th><input type="text" data-i="'+i+'" value="'+esc(nm)+'" style="width:120px;font-weight:600"></th>'}).join("")+"</tr>";
+  A.body.slice(0,5).forEach(function(r){h+="<tr>"+D.names.map(function(nm,i){return "<td>"+esc(r[i]===undefined?"":r[i])+"</td>"}).join("")+"</tr>"});
+  $("aCols").innerHTML=h+"</table>";
+}
+function rename(i,nv){
+  var old=D.names[i];D.names[i]=nv;
+  D.out.forEach(function(c){if(c.t==="src"&&c.s===i&&c.n===old)c.n=nv});
+}
+$("aCols").addEventListener("input",function(e){
+  if(e.target.dataset.i===undefined)return;
+  rename(+e.target.dataset.i,e.target.value);aOut();aPrevT();
+});
+$("bHead").onclick=function(){$("pHead").hidden=!$("pHead").hidden;$("headTxt").value=D.names.join(",")};
+$("headOk").onclick=function(){
+  var a=$("headTxt").value.split(/[,\t\n]/).map(function(s){return s.trim()});
+  D.names.forEach(function(old,i){if(a[i])rename(i,a[i])});
+  $("pHead").hidden=true;aAll();
+};
+function aOut(){
+  var h="<tr><th>出力する列名</th><th>中身</th><th>先頭ゼロ保護</th><th>操作</th></tr>";
+  D.out.forEach(function(c,k){
+    var mid;
+    if(c.t==="src")mid='<select data-k="'+k+'" data-a="s">'+D.names.map(function(nm,i){return '<option value="'+i+'"'+(i===c.s?" selected":"")+">"+esc(nm)+"</option>"}).join("")+"</select>";
+    else if(c.t==="fix")mid='<input type="text" data-k="'+k+'" data-a="v" value="'+esc(c.v)+'" placeholder="固定値">';
+    else mid='<span class="mut">空欄</span>';
+    h+='<tr><td><input type="text" data-k="'+k+'" data-a="n" value="'+esc(c.n)+'"></td><td>'+mid+"</td>"+
+    '<td><input type="checkbox" data-k="'+k+'" data-a="z"'+(c.z?" checked":"")+"></td>"+
+    '<td><button class="i" data-k="'+k+'" data-a="up">↑</button> <button class="i" data-k="'+k+'" data-a="dn">↓</button> <button class="i" data-k="'+k+'" data-a="del">×</button></td></tr>';
+  });
+  $("oCols").innerHTML=h;
+}
+function aPrevT(){
+  if(!A.body.length){$("aPrev").innerHTML='<tr><td class="warn">サンプルCSVを読み込むと、プレビューが表示されます。</td></tr>';return}
+  prevTable($("aPrev"),D,A.body);
+}
+$("oCols").addEventListener("input",function(e){
+  var k=+e.target.dataset.k,a=e.target.dataset.a;
+  if(a==="n"||a==="v"){D.out[k][a]=e.target.value;aPrevT()}
+});
+$("oCols").addEventListener("change",function(e){
+  var k=+e.target.dataset.k,a=e.target.dataset.a;
+  if(a==="s"){var c=D.out[k];c.s=+e.target.value;c.z=zero(c.s);aOut();aPrevT()}
+  if(a==="z"){D.out[k].z=e.target.checked}
+});
+$("oCols").addEventListener("click",function(e){
+  var k=+e.target.dataset.k,a=e.target.dataset.a,j;
+  if(a==="del"){D.out.splice(k,1)}
+  else if(a==="up"&&k>0){j=k-1}else if(a==="dn"&&k<D.out.length-1){j=k+1}else return;
+  if(j!==undefined){var t=D.out[k];D.out[k]=D.out[j];D.out[j]=t}
+  aOut();aPrevT();
+});
+$("aFix").onclick=function(){D.out.push({n:"固定値",t:"fix",s:0,v:"",z:false});aOut();aPrevT()};
+$("aBlank").onclick=function(){D.out.push({n:"空欄",t:"blank",s:0,v:"",z:false});aOut();aPrevT()};
+$("aSrc").onclick=function(){if(!D.names.length)return;D.out.push({n:D.names[0],t:"src",s:0,v:"",z:zero(0)});aOut();aPrevT()};
+$("aReset").onclick=function(){D.out=D.names.map(function(nm,k){return {n:nm,t:"src",s:k,v:"",z:zero(k)}});aOut();aPrevT()};
+
+$("aSave").onclick=function(){
+  var nm=(D.name||"").trim(),m=$("aMsg");
+  if(!nm){m.textContent="パターン名を入力してください";return}
+  if(!D.out.length){m.textContent="出力列を設定してください";return}
+  D.name=nm;
+  var cp=clone(D);delete cp.orig;
+  P[nm]=cp;D.orig=nm;
+  m.textContent=persist()?"保存しました":"保存しました(この画面ではブラウザに残せません。「書き出す」で控えてください)";
+  aList(nm);
+};
+$("aPat").onchange=function(){aPick($("aPat").value)};
+$("aNew").onclick=function(){D=blank();D.orig=null;A={buf:null,body:[],n:0};aAll()};
+$("aDup").onclick=function(){if(!D)return;D.name=(D.name||"パターン")+"(コピー)";D.orig=null;aAll()};
+$("aDel").onclick=function(){
+  var k=$("aPat").value;
+  if(P[k]){delete P[k];persist();if(!Object.keys(P).length)seed();aList();aPick($("aPat").value);$("aMsg0").textContent="削除しました"}
+};
+$("aExp").onclick=function(){saveData("oshiya-patterns.json",JSON.stringify(P,null,1),$("aMsg0"))};
+$("aImp").onclick=function(){$("aImpF").click()};
+$("aImpF").onchange=function(e){
+  var f=e.target.files[0];if(!f)return;
+  var r=new FileReader();
+  r.onload=function(){
+    try{
+      var o=JSON.parse(r.result),n=0;
+      Object.keys(o).forEach(function(k){var v=o[k];if(v&&Array.isArray(v.out)&&Array.isArray(v.names)){v.name=k;P[k]=v;n++}});
+      persist();aList();$("aMsg0").textContent=n+"件のパターンを読み込みました";
+    }catch(x){$("aMsg0").textContent="読み込めませんでした"}
+  };
+  r.readAsText(f);
+};
+
+loadP();fillRun();aList();aPick($("aPat").value);
+</script></body></html>
